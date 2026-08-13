@@ -1,0 +1,32 @@
+# Exclude backend folder per user directive
+backend/
+**/backend/
+voice-rag/backend/
+
+# Sensitive environment files and API keys
+.env
+*.env
+.env.local
+backend/api/.env
+
+# Python bytecode & checkpoints
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Large datasets & binaries
+*.parquet
+*.bin
+*.onnx
+*.pt
+*.safetensors
+data/raw/
+data/processed/
+
+# System & IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

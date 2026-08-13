@@ -1,0 +1,35 @@
+# Python & Virtualenv
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+
+# Environment Variables
+.env
+.env.local
+
+# Data & Indexes (Ignore large downloaded/processed data except structure)
+data/raw/*
+data/processed/*
+data/evaluation/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/evaluation/.gitkeep
+indexes/faiss/*
+indexes/bm25/*
+!indexes/faiss/.gitkeep
+!indexes/bm25/.gitkeep
+models/*
+!models/.gitkeep
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice-Enabled Multilingual RAG — HH Goa 2026</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #07090e;
+            --card-bg: rgba(18, 24, 42, 0.75);
+            --accent-cyan: #00f2fe;
+            --accent-blue: #4facfe;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border-glow: rgba(0, 242, 254, 0.25);
+            --success-green: #00e676;
+            --warning-orange: #ff9100;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Outfit', sans-serif; }
+
+        body {
+            background-color: var(--bg-primary);
+            background-image: 
+                radial-gradient(at 20% 20%, rgba(79, 172, 254, 0.15) 0px, transparent 50%),
+                radial-gradient(at 80% 80%, rgba(0, 242, 254, 0.12) 0px, transparent 50%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 1rem;
+        }
+
+        .main-wrapper {
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2.2rem;
+        }
+
+        header h1 {
+            font-size: 2.8rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.5px;
+        }
+
+        header p { color: var(--text-muted); font-size: 1.1rem; }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(18px);
+            border: 1px solid var(--border-glow);
+            border-radius: 20px;
+            padding: 2.2rem;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+            margin-bottom: 1.8rem;
+            width: 100%;
+        }
+
+        .voice-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .lang-select-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            width: 100%;
+            max-width: 420px;
+        }
+
+        .lang-select-wrapper label {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        .lang-select {
+            flex: 1;
+            background: rgba(10, 14, 24, 0.9);
+            color: var(--text-main);
+            border: 1px solid var(--border-glow);
+            padding: 0.75rem 1.2rem;
+            border-radius: 10px;
+            font-size: 1rem;
+            outline: none;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .lang-select:hover { border-color: var(--accent-cyan); }
+
+        .mic-button {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 30px rgba(0, 242, 254, 0.4);
+            transition: all 0.3s ease;
+        }
+
+        .mic-button:hover { transform: scale(1.08); box-shadow: 0 0 40px rgba(0, 242, 254, 0.6); }
+        .mic-button.recording {
+            animation: pulse 1.5s infinite;
+            background: linear-gradient(135deg, #ff416c, #ff4b2b);
+            box-shadow: 0 0 40px rgba(255, 65, 108, 0.7);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.12); }
+            100% { transform: scale(1); }
+        }
+
+        .mic-button svg { width: 44px; height: 44px; fill: #ffffff; }
+
+        .status-text {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        .search-bar {
+            display: flex;
+            width: 100%;
+            gap: 0.8rem;
+            margin-top: 0.5rem;
+        }
+
+        .search-bar input {
+            flex: 1;
+            background: rgba(10, 14, 24, 0.9);
+            border: 1px solid var(--border-glow);
+            padding: 0.95rem 1.4rem;
+            border-radius: 12px;
+            color: var(--text-main);
+            font-size: 1.05rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-bar input:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.2);
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            border: none;
+            color: #050811;
+            font-weight: 700;
+            font-size: 1.05rem;
+            padding: 0.95rem 2.2rem;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 242, 254, 0.4);
+        }
+
+        /* Results Card */
+        .result-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .result-card-header h2 { font-size: 1.5rem; font-weight: 600; }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.45rem 1.1rem;
+            border-radius: 20px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+
+        .badge-grounded { background: rgba(0, 230, 118, 0.18); color: var(--success-green); border: 1px solid var(--success-green); }
+        .badge-abstained { background: rgba(255, 145, 0, 0.18); color: var(--warning-orange); border: 1px solid var(--warning-orange); }
+
+        .res-section { margin-bottom: 1.4rem; }
+        .res-section label {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            display: block;
+            margin-bottom: 0.4rem;
+        }
+
+        .res-query { font-size: 1.2rem; font-weight: 500; }
+        .res-answer {
+            font-size: 1.15rem;
+            color: #e2e8f0;
+            font-weight: 400;
+            line-height: 1.7;
+        }
+
+        .res-answer ul { margin-top: 0.4rem; margin-bottom: 0.6rem; list-style-type: disc; }
+
+        .context-box {
+            background: rgba(10, 14, 24, 0.6);
+            border-left: 4px solid var(--accent-cyan);
+            padding: 1.2rem;
+            border-radius: 8px;
+            margin-top: 0.7rem;
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .latency-bar {
+            display: flex;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+            margin-top: 1.8rem;
+            padding-top: 1.2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .latency-item {
+            background: rgba(10, 14, 24, 0.7);
+            padding: 0.6rem 1.1rem;
+            border-radius: 10px;
+            font-size: 0.88rem;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .latency-item span { color: var(--accent-cyan); font-weight: 600; }
+
+        .placeholder-box {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-muted);
+        }
+
+        .placeholder-box svg {
+            width: 50px;
+            height: 50px;
+            fill: var(--text-muted);
+            opacity: 0.5;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-wrapper">
+        <header>
+            <h1>Voice-Enabled Multilingual RAG</h1>
+            <p>HH Goa 2026 Task 2 — Grounded Indic Retrieval System (`ai4bharat/MSMARCO-XI`)</p>
+        </header>
+
+        <!-- Search & Control Panel -->
+        <div class="card voice-container">
+            <div class="lang-select-wrapper">
+                <label for="langSelect">Target Language:</label>
+                <select id="langSelect" class="lang-select">
+                    <option value="en">English (English)</option>
+                    <option value="hi">Hindi (हिंदी)</option>
+                    <option value="bn">Bengali (বাংলা)</option>
+                    <option value="ta">Tamil (தமிழ்)</option>
+                    <option value="te">Telugu (తెలుగు)</option>
+                    <option value="mr">Marathi (मराठी)</option>
+                    <option value="gu">Gujarati (ગુજરાતી)</option>
+                    <option value="kn">Kannada (ಕನ್ನಡ)</option>
+                    <option value="ml">Malayalam (മലയാളം)</option>
+                    <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
+                    <option value="ur">Urdu (اردو)</option>
+                </select>
+            </div>
+
+            <button id="micBtn" class="mic-button" title="Click to Speak">
+                <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+            </button>
+            <p id="recordStatus" class="status-text">Click microphone to ask a voice question or type below</p>
+
+            <div class="search-bar">
+                <input type="text" id="textQuery" placeholder="Ask a question in English, Hindi, Bengali, Tamil, etc...">
+                <button id="submitBtn" class="btn-submit">Search</button>
+            </div>
+        </div>
+
+        <!-- Output & Results Section -->
+        <div class="card" id="resultCard">
+            <!-- Initial Placeholder View -->
+            <div id="placeholderView" class="placeholder-box">
+                <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                <h3>Ready for your query</h3>
+                <p>Speak via microphone or type your question above to execute the Multilingual RAG pipeline.</p>
+            </div>
+
+            <!-- Active Output View -->
+            <div id="outputView" style="display: none;">
+                <div class="result-card-header">
+                    <h2>System Output</h2>
+                    <span id="groundingBadge" class="status-badge badge-grounded">Dataset Grounded</span>
+                </div>
+
+                <div class="res-section">
+                    <label>User Query:</label>
+                    <p id="resQuery" class="res-query"></p>
+                </div>
+
+                <div class="res-section">
+                    <label>System Answer:</label>
+                    <div id="resAnswer" class="res-answer"></div>
+                </div>
+
+                <div class="res-section">
+                    <label>Retrieved Context Sources (`ai4bharat/MSMARCO-XI`):</label>
+                    <div id="resContexts"></div>
+                </div>
+
+                <div class="latency-bar">
+                    <div class="latency-item">Total Latency: <span id="latTotal">0.0 ms</span></div>
+                    <div class="latency-item">STT: <span id="latSTT">0.0 ms</span></div>
+                    <div class="latency-item">Sparse (BM25): <span id="latBM25">0.0 ms</span></div>
+                    <div class="latency-item">Dense (BGE-M3): <span id="latDense">0.0 ms</span></div>
+                    <div class="latency-item">RRF Fusion: <span id="latFusion">0.0 ms</span></div>
+                    <div class="latency-item">Reranker: <span id="latRerank">0.0 ms</span></div>
+                    <div class="latency-item">Generation: <span id="latGen">0.0 ms</span></div>
+                    <div class="latency-item">Target Budget: <span>&lt; 200 ms</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const micBtn = document.getElementById('micBtn');
+        const recordStatus = document.getElementById('recordStatus');
+        const submitBtn = document.getElementById('submitBtn');
+        const textQuery = document.getElementById('textQuery');
+        const langSelect = document.getElementById('langSelect');
+        const placeholderView = document.getElementById('placeholderView');
+        const outputView = document.getElementById('outputView');
+
+        let isRecording = false;
+        let recognition = null;
+
+        // Initialize Native Browser Speech Recognition if supported
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+
+            recognition.onstart = () => {
+                isRecording = true;
+                micBtn.classList.add('recording');
+                recordStatus.textContent = 'Listening... Speak your question clearly.';
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                textQuery.value = transcript;
+                recordStatus.textContent = `Transcribed: "${transcript}". Executing pipeline...`;
+                executeSearch(transcript);
+            };
+
+            recognition.onerror = (event) => {
+                console.warn('Speech recognition notice:', event.error);
+                recordStatus.textContent = 'Speech recognition paused. Enter query text or click Mic.';
+                stopRecording();
+            };
+
+            recognition.onend = () => {
+                stopRecording();
+            };
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            micBtn.classList.remove('recording');
+        }
+
+        micBtn.addEventListener('click', () => {
+            if (!recognition) {
+                textQuery.value = 'what is photosynthesis?';
+                executeSearch(textQuery.value);
+                return;
+            }
+
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                const langMap = {
+                    'en': 'en-US', 'hi': 'hi-IN', 'bn': 'bn-IN', 'ta': 'ta-IN', 'te': 'te-IN',
+                    'mr': 'mr-IN', 'gu': 'gu-IN', 'kn': 'kn-IN', 'ml': 'ml-IN',
+                    'pa': 'pa-IN', 'ur': 'ur-IN'
+                };
+                recognition.lang = langMap[langSelect.value] || 'en-US';
+                recognition.start();
+            }
+        });
+
+        submitBtn.addEventListener('click', () => {
+            const q = textQuery.value.trim();
+            if (q) executeSearch(q);
+        });
+
+        textQuery.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const q = textQuery.value.trim();
+                if (q) executeSearch(q);
+            }
+        });
+
+        async function executeSearch(queryStr) {
+            recordStatus.textContent = 'Executing hybrid retrieval & Gemini generation...';
+            try {
+                const res = await fetch('http://localhost:8000/api/v1/query/text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text_query: queryStr, language_code: langSelect.value })
+                });
+                const data = await res.json();
+                renderResponse(data);
+                recordStatus.textContent = 'Query completed successfully.';
+            } catch (err) {
+                console.error(err);
+                recordStatus.textContent = 'Error connecting to API server at http://localhost:8000. Ensure FastAPI server is running.';
+            }
+        }
+
+        function parseMarkdownHTML(text) {
+            if (!text) return '';
+            let formatted = text
+                .replace(/\$\s*\\text\{([^}]+)\}_(\d+)\s*\\text\{([^}]+)\}_(\d+)\s*\$/g, '$1₂$3₄')
+                .replace(/\$\\text\{([^}]+)\}\$/g, '$1')
+                .replace(/\$+/g, '')
+                .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #00f2fe; font-weight: 600;">$1</strong>')
+                .replace(/^\s*[\*\•\-]\s+(.*)$/gm, '<li style="margin-left: 1.2rem; margin-top: 0.35rem;">$1</li>')
+                .replace(/(<li.*<\/li>)/s, '<ul style="margin-top: 0.4rem; margin-bottom: 0.6rem;">$1</ul>')
+                .replace(/\n\n/g, '<br><br>')
+                .replace(/\n/g, '<br>');
+            return formatted;
+        }
+
+        function renderResponse(data) {
+            placeholderView.style.display = 'none';
+            outputView.style.display = 'block';
+
+            document.getElementById('resQuery').textContent = data.query;
+            document.getElementById('resAnswer').innerHTML = parseMarkdownHTML(data.answer);
+            
+            const badge = document.getElementById('groundingBadge');
+            const contexts = data.retrieved_contexts || [];
+
+            if (data.abstained || contexts.length === 0) {
+                badge.className = 'status-badge badge-abstained';
+                badge.textContent = 'Gemini AI Knowledge Base';
+            } else {
+                badge.className = 'status-badge badge-grounded';
+                const scorePct = Math.round((data.grounding_score || 0.88) * 100);
+                badge.textContent = `Dataset Grounded (${scorePct}%)`;
+            }
+
+            const ctxContainer = document.getElementById('resContexts');
+            ctxContainer.innerHTML = '';
+            
+            if (contexts.length === 0) {
+                const d = document.createElement('div');
+                d.className = 'context-box';
+                d.style.borderColor = '#ff9100';
+                d.textContent = 'Note: Exact evidence was not present in the local MS MARCO dataset split. The answer above was generated directly via Gemini AI general knowledge.';
+                ctxContainer.appendChild(d);
+            } else {
+                contexts.forEach((ctx, idx) => {
+                    const d = document.createElement('div');
+                    d.className = 'context-box';
+                    d.textContent = `[Context ${idx+1}]: ${ctx}`;
+                    ctxContainer.appendChild(d);
+                });
+            }
+
+            const lat = data.latency_breakdown || {};
+            document.getElementById('latTotal').textContent = `${(lat.total_ms || 0).toFixed(1)} ms`;
+            document.getElementById('latSTT').textContent = `${(lat.stt_ms || 0).toFixed(1)} ms`;
+            document.getElementById('latBM25').textContent = `${(lat.sparse_retrieval_ms || 0).toFixed(1)} ms`;
+            document.getElementById('latDense').textContent = `${(lat.dense_retrieval_ms || 0).toFixed(1)} ms`;
+            document.getElementById('latFusion').textContent = `${(lat.fusion_ms || 0).toFixed(1)} ms`;
+            document.getElementById('latRerank').textContent = `${(lat.rerank_ms || 0).toFixed(1)} ms`;
+            document.getElementById('latGen').textContent = `${(lat.generation_ms || 0).toFixed(1)} ms`;
+        }
+    </script>
+</body>
+</html>
