@@ -26,12 +26,14 @@ class Settings(BaseModel):
     sarvam_api_key: str = os.getenv("SARVAM_API_KEY", "")
     elevenlabs_api_key: str = os.getenv("ELEVENLABS_API_KEY", "")
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+    grok_api_key: str = os.getenv("GROK_API_KEY", os.getenv("XAI_API_KEY", ""))
     hf_token: str = os.getenv("HF_TOKEN", "")
     
-    # Model Choice Defaults
+    # Model Choice Defaults & Fallback Sequence
     embedding_model_name: str = "BAAI/bge-m3"
     reranker_model_name: str = "BAAI/bge-reranker-v2-m3"
-    generation_model_name: str = "gemini-3.5-flash-lite"
+    primary_generation_model: str = "gemini-3.6-flash"
+    fallback_generation_models: list[str] = ["gemini-3.6-flash", "gemini-3.5-flash", "grok-2", "grok-beta"]
     
     # Retrieval Hyperparameters
     bm25_k1: float = 1.5
