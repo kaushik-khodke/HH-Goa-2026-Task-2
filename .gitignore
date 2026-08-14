@@ -1,22 +1,39 @@
-# Exclude backend folder per user directive
-backend/
-**/backend/
-voice-rag/backend/
-
-# Sensitive environment files and API keys
+# Environment files & API keys (Security)
 .env
 *.env
 .env.local
-backend/api/.env
+.env.*.local
+*.env*
 
-# Python bytecode & checkpoints
+# Node dependencies and Next.js build cache
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+out/
+build/
+dist/
+
+# Python cache & virtual environments
 __pycache__/
+**/__pycache__/
 *.pyc
+*.pyo
+*.pyd
 .pytest_cache/
+venv/
+.venv/
+env/
+.env/
+
+# Jupyter checkpoints
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# Large datasets & binaries
+# Scratch temporary files
+scratch/
+
+# Large binary datasets
 *.parquet
 *.bin
 *.onnx

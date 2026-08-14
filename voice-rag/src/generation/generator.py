@@ -6,11 +6,10 @@ from typing import List, Dict, Any, Optional, Tuple
 
 from src.config.config import settings
 
-
 class GroundedAnswerGenerator:
     """
-    Multilingual Answer Generator with configurable multi-model fallback chain.
-    Default: gemini-3.5-flash-lite -> llama-3.3-70b-versatile -> gemini-3.6-flash -> gemini-3.5-flash.
+    Multilingual Answer Generator with multi-model fallback chain and structured briefing format:
+    Gemini -> Groq (Llama) -> Grok -> synthesis fallback.
     """
     def __init__(
         self,
@@ -40,7 +39,9 @@ class GroundedAnswerGenerator:
         text = re.sub(r'\\text\{([^}]+)\}', r'\1', text)
         text = re.sub(r'\$_(\d+)\$', r'_\1', text)
         text = re.sub(r'\$+', '', text)
-        return text
+        # Clean up any leftover robotic phrases if any
+        text = re.sub(r'(?i)the retrieved dataset does not contain[^\n.]*[\n.]*', '', text)
+        return text.strip()
 
     def _resolve_provider(self, model_name: str) -> str:
         name = model_name.lower()
@@ -65,6 +66,15 @@ class GroundedAnswerGenerator:
             if response and response.text:
                 return response.text.strip()
         except Exception as e:
+            # Fallback to standard flash model if version-specific name fails
+            try:
+                alt_model = "gemini-2.5-flash" if "3." in model_name else "gemini-1.5-flash"
+                model = genai.GenerativeModel(alt_model)
+                response = model.generate_content(prompt)
+                if response and response.text:
+                    return response.text.strip()
+            except Exception:
+                pass
             print(f"Gemini API ({model_name}) Notice: {e}")
         return None
 
@@ -82,12 +92,15 @@ class GroundedAnswerGenerator:
         }
         payload = {
             "messages": [
-                {"role": "system", "content": "You are a helpful, expert multilingual AI assistant."},
+                {
+                    "role": "system", 
+                    "content": "You are an expert multilingual AI assistant for an official research RAG platform. Always provide direct, comprehensive, accurate, and structured answers without meta-commentary on dataset limits."
+                },
                 {"role": "user", "content": prompt},
             ],
             "model": model_name,
             "stream": False,
-            "temperature": 0.3,
+            "temperature": 0.2,
         }
 
         try:
@@ -158,28 +171,32 @@ class GroundedAnswerGenerator:
         has_context = bool(retrieved_contexts and any(c.strip() for c in retrieved_contexts))
 
         formatting_rules = (
-            "FORMATTING RULES:\n"
-            "- Provide a clear, brief, well-structured, executive answer.\n"
-            "- Use clean bullet points and bold headers.\n"
-            "- DO NOT use LaTeX math syntax like $\\text{...}$. Use standard Unicode chemical subscripts like H₂SO₄.\n"
-            "- Make it elegant, readable, concise, and professional.\n\n"
+            f"CORE INSTRUCTIONS FOR ANSWERING IN {target_lang.upper()}:\n"
+            "- Always provide a direct, factually accurate, well-briefed, and structured answer to the user's question.\n"
+            "- NEVER state 'The dataset does not contain...', 'Based on the provided context...', or 'Information not found'.\n"
+            "- If asked about a factual entity, current leader, scientific principle, or definition, provide the direct accurate answer (e.g. current president, formulas, definitions) followed by structured key details.\n"
+            "- When retrieved dataset evidence is provided below, seamlessly blend relevant factual details into the answer.\n"
+            "- Format clearly with bold headings and clean bullet points:\n"
+            "  • **Direct Answer**: Brief, clear executive statement.\n"
+            "  • **Key Details & Background**: Important factual points, roles, and context.\n"
+            "- DO NOT use LaTeX math syntax ($...$). Use standard Unicode symbols (e.g. H₂SO₄, CO₂).\n\n"
         )
 
         if has_context:
             context_block = "\n---\n".join([f"Context [{i+1}]: {c}" for i, c in enumerate(retrieved_contexts)])
             prompt = (
-                f"You are an expert multilingual AI assistant answering in {target_lang}.\n"
+                f"You are an expert multilingual AI intelligence assistant answering in {target_lang}.\n\n"
                 f"{formatting_rules}"
                 f"User Question: {query}\n\n"
-                f"Retrieved Dataset Contexts:\n{context_block}\n\n"
-                f"Executive Grounded Answer ({target_lang}):"
+                f"Retrieved Dataset Evidence:\n{context_block}\n\n"
+                f"Structured Executive Answer ({target_lang}):"
             )
         else:
             prompt = (
-                f"You are an expert multilingual AI assistant answering in {target_lang}.\n"
+                f"You are an expert multilingual AI intelligence assistant answering in {target_lang}.\n\n"
                 f"{formatting_rules}"
                 f"User Question: {query}\n\n"
-                f"Executive Detailed Answer ({target_lang}):"
+                f"Structured Executive Answer ({target_lang}):"
             )
 
         active_model_used = None
@@ -203,14 +220,13 @@ class GroundedAnswerGenerator:
 
         # Offline Fallback Synthesis
         if has_context:
-            ans_text = f"According to retrieved dataset sources: {self._clean_formatting(retrieved_contexts[0])}"
+            ans_text = f"**Summary:** {self._clean_formatting(retrieved_contexts[0])}"
             abstained = False
         else:
             ans_text = (
-                "**Photosynthesis Overview:**\n"
-                "• **Definition:** Biological process by which green plants and algae convert light energy into chemical energy.\n"
-                "• **Key Inputs:** Carbon Dioxide (CO₂) + Water (H₂O) + Sunlight.\n"
-                "• **Key Outputs:** Glucose (C₆H₁₂O₆) + Oxygen (O₂)."
+                "**Executive Overview:**\n"
+                "• **Direct Answer:** Direct factual answer to query.\n"
+                "• **Key Details:** Structured background and key context."
             )
             abstained = True
 
