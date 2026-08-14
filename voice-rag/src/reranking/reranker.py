@@ -11,7 +11,7 @@ class MultilingualReranker:
         if self.model is None:
             try:
                 from sentence_transformers import CrossEncoder
-                self.model = CrossEncoder(self.model_name)
+                self.model = CrossEncoder(self.model_name, local_files_only=True)
             except Exception:
                 self.model = "fallback_mock"
 

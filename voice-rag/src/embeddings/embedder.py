@@ -15,11 +15,11 @@ class MultilingualEmbedder:
         if self.model is None:
             try:
                 from sentence_transformers import SentenceTransformer
-                self.model = SentenceTransformer("all-MiniLM-L6-v2")
+                self.model = SentenceTransformer("all-MiniLM-L6-v2", local_files_only=True)
             except Exception:
                 try:
                     from sentence_transformers import SentenceTransformer
-                    self.model = SentenceTransformer(self.model_name)
+                    self.model = SentenceTransformer(self.model_name, local_files_only=True)
                 except Exception:
                     self.model = "fallback_mock"
 
