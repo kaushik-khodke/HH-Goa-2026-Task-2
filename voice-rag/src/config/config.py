@@ -32,8 +32,16 @@ class Settings(BaseModel):
     # Model Choice Defaults & Fallback Sequence
     embedding_model_name: str = "BAAI/bge-m3"
     reranker_model_name: str = "BAAI/bge-reranker-v2-m3"
-    primary_generation_model: str = "gemini-3.6-flash"
-    fallback_generation_models: list[str] = ["gemini-3.6-flash", "gemini-3.5-flash", "grok-2", "grok-beta"]
+    primary_generation_model: str = os.getenv("PRIMARY_GENERATION_MODEL", "gemini-3.5-flash-lite")
+    fallback_generation_models: list[str] = [
+        m.strip()
+        for m in os.getenv(
+            "FALLBACK_GENERATION_MODELS",
+            "llama-3.3-70b-versatile,gemini-3.5-flash,gemini-3.6-flash,gemini-2.5-flash",
+        ).split(",")
+        if m.strip()
+    ]
+    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
     
     # Retrieval Hyperparameters
     bm25_k1: float = 1.5

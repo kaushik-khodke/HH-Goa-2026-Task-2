@@ -1,24 +1,30 @@
 import os
 import time
 import re
-import json
 import requests
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
+
+from src.config.config import settings
+
 
 class GroundedAnswerGenerator:
     """
-    Multilingual Answer Generator with multi-model fallback chain:
-    gemini-3.6-flash -> gemini-3.5-flash -> grok-2 / grok-beta -> synthesis fallback.
+    Multilingual Answer Generator with configurable multi-model fallback chain.
+    Default: gemini-3.5-flash-lite -> llama-3.3-70b-versatile -> gemini-3.6-flash -> gemini-3.5-flash.
     """
     def __init__(
-        self, 
-        gemini_api_key: Optional[str] = None, 
+        self,
+        gemini_api_key: Optional[str] = None,
         grok_api_key: Optional[str] = None,
-        primary_model: str = "gemini-3.6-flash"
+        groq_api_key: Optional[str] = None,
+        primary_model: Optional[str] = None,
+        fallback_models: Optional[List[str]] = None,
     ):
-        self.gemini_api_key = gemini_api_key or os.getenv("GEMINI_API_KEY", "")
-        self.grok_api_key = grok_api_key or os.getenv("GROK_API_KEY", os.getenv("XAI_API_KEY", ""))
-        self.primary_model = primary_model
+        self.gemini_api_key = gemini_api_key or settings.gemini_api_key
+        self.grok_api_key = grok_api_key or settings.grok_api_key
+        self.groq_api_key = groq_api_key or settings.groq_api_key
+        self.primary_model = primary_model or settings.primary_generation_model
+        self.fallback_models = fallback_models if fallback_models is not None else settings.fallback_generation_models
 
     def _get_language_name(self, code: str) -> str:
         lang_map = {
@@ -36,11 +42,21 @@ class GroundedAnswerGenerator:
         text = re.sub(r'\$+', '', text)
         return text
 
+    def _resolve_provider(self, model_name: str) -> str:
+        name = model_name.lower()
+        if name.startswith("gemini"):
+            return "gemini"
+        if name.startswith("llama") or name.startswith("meta-llama"):
+            return "groq"
+        if name.startswith("grok"):
+            return "grok"
+        return "unknown"
+
     def _call_gemini_model(self, prompt: str, model_name: str) -> Optional[str]:
-        """Attempt API call to Gemini model (e.g. gemini-3.6-flash, gemini-3.5-flash)."""
+        """Attempt API call to a Gemini model."""
         if not self.gemini_api_key:
             return None
-            
+
         try:
             import google.generativeai as genai
             genai.configure(api_key=self.gemini_api_key)
@@ -49,58 +65,96 @@ class GroundedAnswerGenerator:
             if response and response.text:
                 return response.text.strip()
         except Exception as e:
-            # Try fallback model variant if model name is version-specific
-            try:
-                alt_model_name = "gemini-1.5-flash" if "3." in model_name else "gemini-2.5-flash"
-                model = genai.GenerativeModel(alt_model_name)
-                response = model.generate_content(prompt)
-                if response and response.text:
-                    return response.text.strip()
-            except Exception:
-                pass
             print(f"Gemini API ({model_name}) Notice: {e}")
         return None
 
-    def _call_grok_model(self, prompt: str, model_name: str = "grok-beta") -> Optional[str]:
-        """Attempt API call to xAI Grok API (https://api.x.ai/v1/chat/completions)."""
-        if not self.grok_api_key:
-            return None
-
+    def _call_openai_compatible_chat(
+        self,
+        prompt: str,
+        model_name: str,
+        api_url: str,
+        api_key: str,
+        provider_label: str,
+    ) -> Optional[str]:
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.grok_api_key}"
+            "Authorization": f"Bearer {api_key}",
         }
         payload = {
             "messages": [
                 {"role": "system", "content": "You are a helpful, expert multilingual AI assistant."},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
             "model": model_name,
             "stream": False,
-            "temperature": 0.3
+            "temperature": 0.3,
         }
-        
+
         try:
-            res = requests.post("https://api.x.ai/v1/chat/completions", headers=headers, json=payload, timeout=12)
+            res = requests.post(api_url, headers=headers, json=payload, timeout=20)
             if res.status_code == 200:
                 data = res.json()
                 content = data["choices"][0]["message"]["content"]
                 return content.strip()
-            else:
-                print(f"Grok API status code {res.status_code}: {res.text}")
+            print(f"{provider_label} API status code {res.status_code}: {res.text}")
         except Exception as e:
-            print(f"Grok API Exception: {e}")
+            print(f"{provider_label} API Exception: {e}")
         return None
 
+    def _call_grok_model(self, prompt: str, model_name: str) -> Optional[str]:
+        """Attempt API call to xAI Grok (https://api.x.ai/v1/chat/completions)."""
+        if not self.grok_api_key:
+            return None
+        return self._call_openai_compatible_chat(
+            prompt,
+            model_name,
+            "https://api.x.ai/v1/chat/completions",
+            self.grok_api_key,
+            "Grok",
+        )
+
+    def _call_groq_model(self, prompt: str, model_name: str) -> Optional[str]:
+        """Attempt API call to Groq for Llama models (https://api.groq.com/openai/v1/chat/completions)."""
+        if not self.groq_api_key:
+            return None
+        return self._call_openai_compatible_chat(
+            prompt,
+            model_name,
+            "https://api.groq.com/openai/v1/chat/completions",
+            self.groq_api_key,
+            "Groq",
+        )
+
+    def _call_model(self, prompt: str, model_name: str) -> Tuple[Optional[str], Optional[str]]:
+        provider = self._resolve_provider(model_name)
+        if provider == "gemini":
+            result = self._call_gemini_model(prompt, model_name)
+            return result, f"Gemini ({model_name})" if result else None
+        if provider == "groq":
+            result = self._call_groq_model(prompt, model_name)
+            return result, f"Groq ({model_name})" if result else None
+        if provider == "grok":
+            result = self._call_grok_model(prompt, model_name)
+            return result, f"Grok ({model_name})" if result else None
+        print(f"Unknown model provider for: {model_name}")
+        return None, None
+
+    def _build_model_chain(self) -> List[str]:
+        chain: List[str] = []
+        for model_id in [self.primary_model, *self.fallback_models]:
+            if model_id and model_id not in chain:
+                chain.append(model_id)
+        return chain
+
     def generate_grounded_answer(
-        self, 
-        query: str, 
-        retrieved_contexts: List[str], 
+        self,
+        query: str,
+        retrieved_contexts: List[str],
         language_code: str = "hi"
     ) -> Dict[str, Any]:
         start_time = time.perf_counter()
         target_lang = self._get_language_name(language_code)
-        
+
         has_context = bool(retrieved_contexts and any(c.strip() for c in retrieved_contexts))
 
         formatting_rules = (
@@ -128,29 +182,13 @@ class GroundedAnswerGenerator:
                 f"Executive Detailed Answer ({target_lang}):"
             )
 
-        # Multi-Model Fallback Chain Execution
-        fallback_models_chain = [
-            ("gemini", "gemini-3.6-flash"),
-            ("gemini", "gemini-3.5-flash"),
-            ("gemini", "gemini-2.5-flash"),
-            ("grok", "grok-2"),
-            ("grok", "grok-beta")
-        ]
-
         active_model_used = None
         ans_text = None
 
-        for provider, model_id in fallback_models_chain:
-            if provider == "gemini" and self.gemini_api_key:
-                ans_text = self._call_gemini_model(prompt, model_id)
-                if ans_text:
-                    active_model_used = f"Gemini ({model_id})"
-                    break
-            elif provider == "grok" and self.grok_api_key:
-                ans_text = self._call_grok_model(prompt, model_id)
-                if ans_text:
-                    active_model_used = f"Grok ({model_id})"
-                    break
+        for model_id in self._build_model_chain():
+            ans_text, active_model_used = self._call_model(prompt, model_id)
+            if ans_text:
+                break
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
