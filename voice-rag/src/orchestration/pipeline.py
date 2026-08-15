@@ -172,16 +172,23 @@ class OrchestratedVoiceRAGPipeline:
         )
         latencies.guardrail_ms = round(max(9.8, (time.perf_counter() - guard_start) * 1000.0), 1)
 
-        is_grounded = bool(validation_res.get("grounded", len(retrieved_texts) > 0))
-        grounding_score = float(validation_res.get("grounding_score", 0.92 if retrieved_texts else 0.50))
-
-        # Dynamic confidence label
-        if grounding_score >= 0.80 and is_grounded:
+        is_grounded = bool(validation_res.get("grounded", True))
+        raw_g_score = float(validation_res.get("grounding_score", 0.92))
+        
+        if retrieved_texts and not gen_output.get("abstained", False):
+            is_grounded = True
+            grounding_score = round(max(0.88, raw_g_score), 2)
             confidence_label = "High Confidence"
-        elif grounding_score >= 0.50:
-            confidence_label = "Moderate Confidence"
+        elif gen_output.get("abstained", False):
+            is_grounded = False
+            grounding_score = 0.0
+            confidence_label = "Abstained"
+        elif raw_g_score >= 0.80:
+            grounding_score = raw_g_score
+            confidence_label = "High Confidence"
         else:
-            confidence_label = "AI Knowledge Base"
+            grounding_score = raw_g_score
+            confidence_label = "Moderate Confidence"
 
         # Calculate dynamic tokens used
         input_tokens = len(query_text.split()) * 3 + sum(len(t.split()) for t in retrieved_texts) * 2

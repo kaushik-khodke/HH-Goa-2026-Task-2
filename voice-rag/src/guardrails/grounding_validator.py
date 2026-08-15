@@ -55,7 +55,8 @@ class GroundingValidator:
             # 1. Multilingual Dense Semantic Similarity (BGE-M3 Embedding Space)
             ans_emb = self.embedder.encode(generated_answer)
             ctx_emb = self.embedder.encode(combined_context)
-            raw_sim = float(self.embedder.compute_similarity(ans_emb, ctx_emb))
+            sim_val = self.embedder.compute_similarity(ans_emb, ctx_emb)
+            raw_sim = float(sim_val.item() if hasattr(sim_val, "item") else sim_val)
             
             # 2. Dynamic Entity & Number Overlap (Numbers, formulas, proper nouns)
             ans_numbers = set(re.findall(r'\d+(?:\.\d+)?', generated_answer))

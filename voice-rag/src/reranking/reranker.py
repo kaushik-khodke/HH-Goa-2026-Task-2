@@ -18,7 +18,7 @@ class MultilingualReranker:
     def rerank(
         self, 
         query: str, 
-        candidates: List[Dict[str, Any]], 
+        candidates: List[Any], 
         top_k: int = 5
     ) -> List[Tuple[Dict[str, Any], float]]:
         """Rerank candidate passages against query and return top_k reranked results."""
@@ -26,7 +26,8 @@ class MultilingualReranker:
             return []
             
         self._init_model()
-        pairs = [(query, c.get("text", "")) for c in candidates]
+        docs = [c[0] if isinstance(c, (list, tuple)) else c for c in candidates]
+        pairs = [(query, doc.get("text", "")) for doc in docs]
         
         if self.model != "fallback_mock":
             scores = self.model.predict(pairs)
@@ -34,13 +35,13 @@ class MultilingualReranker:
             # High-speed pseudo-reranking score fallback based on term overlap & position
             scores = []
             q_words = set(query.lower().split())
-            for idx, c in enumerate(candidates):
-                c_words = set(c.get("text", "").lower().split())
+            for idx, doc in enumerate(docs):
+                c_words = set(doc.get("text", "").lower().split())
                 overlap = len(q_words.intersection(c_words))
-                pos_bonus = (len(candidates) - idx) / len(candidates)
+                pos_bonus = (len(docs) - idx) / len(docs)
                 score = (overlap * 2.0) + pos_bonus
                 scores.append(score)
                 
         ranked_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
-        results = [(candidates[i], float(scores[i])) for i in ranked_indices]
+        results = [(docs[i], float(scores[i])) for i in ranked_indices]
         return results

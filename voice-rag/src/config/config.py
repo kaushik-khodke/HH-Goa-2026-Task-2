@@ -37,7 +37,7 @@ class Settings(BaseModel):
         m.strip()
         for m in os.getenv(
             "FALLBACK_GENERATION_MODELS",
-            "llama-3.3-70b-versatile,gemini-3.5-flash,gemini-3.6-flash,gemini-2.5-flash",
+            "qwen-3.6-27b,gemini-3.5-flash,gemini-3.6-flash,gemini-2.5-flash",
         ).split(",")
         if m.strip()
     ]

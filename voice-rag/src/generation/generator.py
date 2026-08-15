@@ -47,10 +47,12 @@ class GroundedAnswerGenerator:
         name = model_name.lower()
         if name.startswith("gemini"):
             return "gemini"
-        if name.startswith("llama") or name.startswith("meta-llama"):
-            return "groq"
+        if name.startswith("qwen"):
+            return "qwen"
         if name.startswith("grok"):
             return "grok"
+        if name.startswith("llama") or name.startswith("meta-llama"):
+            return "groq"
         return "unknown"
 
     def _call_gemini_model(self, prompt: str, model_name: str) -> Optional[str]:
@@ -114,6 +116,22 @@ class GroundedAnswerGenerator:
             print(f"{provider_label} API Exception: {e}")
         return None
 
+    def _call_qwen_model(self, prompt: str, model_name: str) -> Optional[str]:
+        """Attempt API call to Qwen (Qwen3.6 27B / Qwen 2.5) via Groq or OpenAI-compatible endpoint."""
+        api_key = self.groq_api_key or self.grok_api_key
+        if not api_key:
+            return None
+        
+        # Map Qwen model name for Groq / compatible endpoints if needed
+        groq_qwen_target = "qwen-2.5-32b" if "32b" in model_name or "27b" in model_name else model_name
+        return self._call_openai_compatible_chat(
+            prompt,
+            groq_qwen_target,
+            "https://api.groq.com/openai/v1/chat/completions",
+            api_key,
+            f"Qwen ({model_name})",
+        )
+
     def _call_grok_model(self, prompt: str, model_name: str) -> Optional[str]:
         """Attempt API call to xAI Grok (https://api.x.ai/v1/chat/completions)."""
         if not self.grok_api_key:
@@ -127,7 +145,7 @@ class GroundedAnswerGenerator:
         )
 
     def _call_groq_model(self, prompt: str, model_name: str) -> Optional[str]:
-        """Attempt API call to Groq for Llama models (https://api.groq.com/openai/v1/chat/completions)."""
+        """Attempt API call to Groq (https://api.groq.com/openai/v1/chat/completions)."""
         if not self.groq_api_key:
             return None
         return self._call_openai_compatible_chat(
@@ -143,12 +161,15 @@ class GroundedAnswerGenerator:
         if provider == "gemini":
             result = self._call_gemini_model(prompt, model_name)
             return result, f"Gemini ({model_name})" if result else None
-        if provider == "groq":
-            result = self._call_groq_model(prompt, model_name)
-            return result, f"Groq ({model_name})" if result else None
+        if provider == "qwen":
+            result = self._call_qwen_model(prompt, model_name)
+            return result, f"Qwen ({model_name})" if result else None
         if provider == "grok":
             result = self._call_grok_model(prompt, model_name)
             return result, f"Grok ({model_name})" if result else None
+        if provider == "groq":
+            result = self._call_groq_model(prompt, model_name)
+            return result, f"Groq ({model_name})" if result else None
         print(f"Unknown model provider for: {model_name}")
         return None, None
 
