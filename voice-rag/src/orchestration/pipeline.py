@@ -166,29 +166,29 @@ class OrchestratedVoiceRAGPipeline:
 
         # Stage 7: Grounding & Factual Consistency Validation Check
         guard_start = time.perf_counter()
+        relevance_scores_list = [s.relevance_score for s in retrieved_sources]
         validation_res = self.validator.validate_answer_grounding(
             generated_answer=gen_output["answer"],
-            contexts=retrieved_texts
+            contexts=retrieved_texts,
+            relevance_scores=relevance_scores_list
         )
         latencies.guardrail_ms = round(max(9.8, (time.perf_counter() - guard_start) * 1000.0), 1)
 
-        is_grounded = bool(validation_res.get("grounded", True))
-        raw_g_score = float(validation_res.get("grounding_score", 0.92))
+        is_grounded = bool(validation_res.get("grounded", len(retrieved_texts) > 0))
+        grounding_score = float(validation_res.get("grounding_score", 0.92))
         
-        if retrieved_texts and not gen_output.get("abstained", False):
-            is_grounded = True
-            grounding_score = round(max(0.88, raw_g_score), 2)
-            confidence_label = "High Confidence"
-        elif gen_output.get("abstained", False):
+        if gen_output.get("abstained", False) or not retrieved_texts:
             is_grounded = False
             grounding_score = 0.0
             confidence_label = "Abstained"
-        elif raw_g_score >= 0.80:
-            grounding_score = raw_g_score
+        elif grounding_score >= 0.92:
+            confidence_label = "Very High Confidence"
+        elif grounding_score >= 0.82:
             confidence_label = "High Confidence"
-        else:
-            grounding_score = raw_g_score
+        elif grounding_score >= 0.65:
             confidence_label = "Moderate Confidence"
+        else:
+            confidence_label = "Low Confidence"
 
         # Calculate dynamic tokens used
         input_tokens = len(query_text.split()) * 3 + sum(len(t.split()) for t in retrieved_texts) * 2

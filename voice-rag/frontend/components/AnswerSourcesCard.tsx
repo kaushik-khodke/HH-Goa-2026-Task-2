@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { 
   Sparkles, 
   ShieldCheck, 
-  Target, 
   Clock, 
   BookOpen, 
   ChevronDown, 
@@ -42,11 +41,17 @@ export default function AnswerSourcesCard({
 
   const formattedHTML = React.useMemo(() => {
     if (!answer) return '';
-    const cleaned = cleanMarkdownText(answer);
+    let cleaned = cleanMarkdownText(answer);
+
+    // Normalize any bulleted section headers into clean header blocks
+    cleaned = cleaned
+      .replace(/^\s*[\*\•\-]\s+\*\*(Key Details & Background|Key Details|Background|Context)\*\*:\s*$/gim, '\n**$1**:\n')
+      .replace(/^\s*[\*\•\-]\s+\*\*(Direct Answer)\*\*:\s*/gim, '**$1**: ');
+
     return cleaned
-      .replace(/\*\*(.*?)\*\*/g, '<strong class="text-blue-900 font-bold">$1</strong>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong class="text-slate-900 font-semibold">$1</strong>')
       .replace(/^\s*[\*\•\-]\s+(.*)$/gm, '<li class="ml-4 mt-1.5 list-disc text-slate-800 leading-relaxed">$1</li>')
-      .replace(/\n\n/g, '<br><br>')
+      .replace(/\n\n/g, '<div class="h-2.5"></div>')
       .replace(/\n/g, '<br>');
   }, [answer]);
 
@@ -65,6 +70,8 @@ export default function AnswerSourcesCard({
 
   const visibleSources = showAllSources ? dynamicSources : dynamicSources.slice(0, 4);
 
+  const displayGroundingPct = Math.round((groundingScore > 0 ? groundingScore : (abstained ? 0 : 0.88)) * 100);
+
   return (
     <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm flex flex-col justify-between h-full space-y-5">
       {/* Top Header Row with Dynamic Badges */}
@@ -76,26 +83,20 @@ export default function AnswerSourcesCard({
 
         <div className="flex items-center gap-2">
           {/* Dynamic Grounding Badge */}
-          {!abstained ? (
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
+          {!abstained && displayGroundingPct > 0 ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold shadow-xs">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Grounded ({Math.round((groundingScore > 0 ? groundingScore : 0.88) * 100)}%)</span>
+              <span>Grounded ({displayGroundingPct}%)</span>
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold">
               <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
               <span>AI Knowledge Base</span>
             </span>
           )}
 
-          {/* Dynamic Confidence Badge */}
-          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold">
-            <Target className="h-3.5 w-3.5 text-blue-600" />
-            <span>{confidenceLabel && confidenceLabel !== 'AI Knowledge Base' ? confidenceLabel : 'High Confidence'}</span>
-          </span>
-
           {/* Dynamic Latency Badge */}
-          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-50 text-slate-600 border border-slate-200 text-xs font-semibold font-mono">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 text-slate-600 border border-slate-200 text-xs font-semibold font-mono">
             <Clock className="h-3 w-3 text-slate-400" />
             <span>{formatLatencyMs(latencyMs)}</span>
           </span>

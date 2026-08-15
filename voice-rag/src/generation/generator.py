@@ -34,11 +34,14 @@ class GroundedAnswerGenerator:
         return lang_map.get(code.lower(), "English")
 
     def _clean_formatting(self, text: str) -> str:
-        """Strip raw LaTeX math tags like $\\text{H}_2\\text{SO}_4$ into clean H₂SO₄."""
+        """Strip raw LaTeX math tags and clean section header bullet markers."""
         text = re.sub(r'\$\s*\\text\{H\}_2\\text\{SO\}_4\s*\$', 'H₂SO₄', text)
         text = re.sub(r'\\text\{([^}]+)\}', r'\1', text)
         text = re.sub(r'\$_(\d+)\$', r'_\1', text)
         text = re.sub(r'\$+', '', text)
+        # Convert bulleted section headers to clean headers
+        text = re.sub(r'^\s*[\*\•\-]\s+\*\*(Key Details & Background|Key Details|Background|Context)\*\*:\s*$', r'**\1**:', text, flags=re.MULTILINE)
+        text = re.sub(r'^\s*[\*\•\-]\s+\*\*(Direct Answer)\*\*:\s*', r'**\1**: ', text, flags=re.MULTILINE)
         # Clean up any leftover robotic phrases if any
         text = re.sub(r'(?i)the retrieved dataset does not contain[^\n.]*[\n.]*', '', text)
         return text.strip()
@@ -193,14 +196,15 @@ class GroundedAnswerGenerator:
 
         formatting_rules = (
             f"CORE INSTRUCTIONS FOR ANSWERING IN {target_lang.upper()}:\n"
-            "- Always provide a direct, factually accurate, well-briefed, and structured answer to the user's question.\n"
+            "- Always provide a direct, factually accurate, comprehensive, and well-structured answer to the user's question.\n"
             "- NEVER state 'The dataset does not contain...', 'Based on the provided context...', or 'Information not found'.\n"
-            "- If asked about a factual entity, current leader, scientific principle, or definition, provide the direct accurate answer (e.g. current president, formulas, definitions) followed by structured key details.\n"
-            "- When retrieved dataset evidence is provided below, seamlessly blend relevant factual details into the answer.\n"
-            "- Format clearly with bold headings and clean bullet points:\n"
-            "  • **Direct Answer**: Brief, clear executive statement.\n"
-            "  • **Key Details & Background**: Important factual points, roles, and context.\n"
-            "- DO NOT use LaTeX math syntax ($...$). Use standard Unicode symbols (e.g. H₂SO₄, CO₂).\n\n"
+            "- Structure your answer cleanly with these exact sections:\n"
+            "  **Direct Answer**: [Direct factual answer to the question in 1-2 clear sentences]\n"
+            "  **Key Details & Background**:\n"
+            "  • [Key Detail 1: Background, tenure, significant events, or definitions]\n"
+            "  • [Key Detail 2: Roles, historical context, or essential facts]\n"
+            "- Always populate the Key Details & Background section with at least 2 substantive bullet points.\n"
+            "- DO NOT use LaTeX math syntax ($...$). Use clean Unicode symbols.\n\n"
         )
 
         if has_context:
