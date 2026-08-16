@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional
 class SpeechToTextClient:
     """
     Speech-to-Text Client powered primarily by Python's SpeechRecognition library (Google STT)
-    with multi-tier fallback to Sarvam AI Saaras v3 and deterministic benchmark mocks.
+    with fallback to Sarvam AI Saaras v3 when an API key is configured.
     """
     def __init__(self, provider: str = "speech_recognition", api_key: Optional[str] = None, model: str = "saaras:v3"):
         self.provider = provider.lower()
@@ -40,14 +40,11 @@ class SpeechToTextClient:
         try:
             import speech_recognition as sr
             recognizer = sr.Recognizer()
-            recognizer.energy_threshold = 300
-            recognizer.dynamic_energy_threshold = True
-            
+
             audio_file = io.BytesIO(audio_bytes)
             with sr.AudioFile(audio_file) as source:
-                recognizer.adjust_for_ambient_noise(source, duration=0.1)
                 audio_data = recognizer.record(source)
-            
+
             transcript = recognizer.recognize_google(audio_data, language=target_lang)
             if transcript and transcript.strip():
                 elapsed_ms = (time.perf_counter() - start_time) * 1000.0
@@ -93,12 +90,13 @@ class SpeechToTextClient:
             except Exception as e:
                 print(f"Sarvam AI ({self.model}) STT Notice: {e}")
 
-        # 3. Fallback mock for offline / synthetic tests
+        # 3. All engines failed — return empty so the pipeline can surface a clear error
         elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+        print(f"=== STT failed for language {target_lang}; no transcript produced ===")
         return {
-            "transcription": "मैनहट्टन परियोजना की सफलता का प्रभाव क्या था?",
+            "transcription": "",
             "language_detected": language_code,
-            "confidence": 0.90,
+            "confidence": 0.0,
             "latency_ms": elapsed_ms,
-            "provider": "stt_offline_fallback"
+            "provider": "stt_failed"
         }

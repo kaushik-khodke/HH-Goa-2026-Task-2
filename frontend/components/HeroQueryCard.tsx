@@ -43,6 +43,8 @@ export default function HeroQueryCard({
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [micStatusText, setMicStatusText] = useState('Click microphone to speak');
+  const [isMounted, setIsMounted] = useState(false);
+
   const recognitionRef = useRef<any>(null);
   const pcmRecorderRef = useRef<PcmWavRecorder | null>(null);
   const capturedTextRef = useRef<string>('');
@@ -50,47 +52,48 @@ export default function HeroQueryCard({
   const currentLang = SUPPORTED_LANGUAGES.find((l) => l.code === selectedLanguage) || SUPPORTED_LANGUAGES[0];
 
   useEffect(() => {
+    setIsMounted(true);
+
     if (typeof window !== 'undefined') {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
-        const rec = new SpeechRecognition();
-        rec.continuous = false;
-        rec.interimResults = true;
+        try {
+          const rec = new SpeechRecognition();
+          rec.continuous = false;
+          rec.interimResults = true;
 
-        rec.onstart = () => {
-          setIsListening(true);
-          setMicStatusText(`Listening in ${currentLang.name}... Speak now`);
-        };
+          rec.onstart = () => {
+            setMicStatusText(`Listening in ${currentLang.name}... Speak clearly`);
+          };
 
-        rec.onresult = (event: any) => {
-          let interimTranscript = '';
-          let finalTranscript = '';
+          rec.onresult = (event: any) => {
+            let interimTranscript = '';
+            let finalTranscript = '';
 
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript;
-            } else {
-              interimTranscript += event.results[i][0].transcript;
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript;
+              } else {
+                interimTranscript += event.results[i][0].transcript;
+              }
             }
-          }
 
-          const currentText = finalTranscript || interimTranscript;
-          if (currentText) {
-            capturedTextRef.current = currentText;
-            onQueryChange(currentText);
-            setMicStatusText(`Live Transcribed: "${currentText}"`);
-          }
-        };
+            const currentText = (finalTranscript || interimTranscript).trim();
+            if (currentText) {
+              capturedTextRef.current = currentText;
+              onQueryChange(currentText);
+              setMicStatusText(`Live: "${currentText}"`);
+            }
+          };
 
-        rec.onerror = (e: any) => {
-          console.warn('Browser speech recognition note:', e.error);
-        };
+          rec.onerror = (e: any) => {
+            console.warn('SpeechRecognition notice:', e.error);
+          };
 
-        rec.onend = () => {
-          setIsListening(false);
-        };
-
-        recognitionRef.current = rec;
+          recognitionRef.current = rec;
+        } catch (e) {
+          console.warn('SpeechRecognition init error:', e);
+        }
       }
     }
   }, [currentLang, onQueryChange]);
@@ -99,46 +102,53 @@ export default function HeroQueryCard({
     if (isLoading) return;
 
     if (isListening) {
+      // 1. User clicked to stop speaking -> Finish recording and transcribe
       setIsListening(false);
-      setMicStatusText('Processing audio with Python SpeechRecognition...');
+      setMicStatusText('Transcribing voice with Python SpeechRecognition...');
 
-      // Stop browser recognition
+      // Stop browser recognition if running
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
         } catch (e) {}
       }
 
-      // Stop PCM recorder and submit WAV blob to Python backend
+      // Stop PCM recorder and submit audio WAV to Python backend
       if (pcmRecorderRef.current) {
         try {
           const wavBlob = await pcmRecorderRef.current.stop();
           pcmRecorderRef.current = null;
-          
+
           if (onVoiceBlobSubmit) {
             onVoiceBlobSubmit(wavBlob);
-          } else if (capturedTextRef.current) {
-            onSubmit(capturedTextRef.current);
+          } else if (capturedTextRef.current.trim()) {
+            onSubmit(capturedTextRef.current.trim());
+          } else {
+            setMicStatusText('No audio detected. Click mic to try again.');
           }
         } catch (err) {
-          console.error('Failed to encode audio WAV:', err);
-          if (capturedTextRef.current) {
-            onSubmit(capturedTextRef.current);
+          console.error('Audio recorder stop error:', err);
+          if (capturedTextRef.current.trim()) {
+            onSubmit(capturedTextRef.current.trim());
+          } else {
+            setMicStatusText('Audio error. Click mic to try again.');
           }
         }
-      } else if (capturedTextRef.current) {
-        onSubmit(capturedTextRef.current);
+      } else if (capturedTextRef.current.trim()) {
+        onSubmit(capturedTextRef.current.trim());
       }
     } else {
+      // 2. User clicked to start speaking -> Start PCM audio capture
       capturedTextRef.current = '';
+
       try {
         const recorder = new PcmWavRecorder();
         await recorder.start();
         pcmRecorderRef.current = recorder;
         setIsListening(true);
-        setMicStatusText(`Listening in ${currentLang.name}... Click mic again when done`);
+        setMicStatusText(`Listening in ${currentLang.name}... Speak now, then click mic to stop`);
 
-        // Also start browser recognizer for live waveform & text hints
+        // Also start browser recognizer for live text streaming
         if (recognitionRef.current) {
           recognitionRef.current.lang = currentLang.sttLang;
           try {
@@ -146,8 +156,8 @@ export default function HeroQueryCard({
           } catch (e) {}
         }
       } catch (err) {
-        console.error('Failed to start microphone:', err);
-        setMicStatusText('Microphone access denied. Please allow mic in browser settings.');
+        console.error('Microphone capture error:', err);
+        setMicStatusText('Microphone access denied. Please allow microphone in browser settings.');
         setIsListening(false);
       }
     }
@@ -261,9 +271,11 @@ export default function HeroQueryCard({
               <span className="absolute -inset-1 rounded-full border-2 border-rose-400 animate-ping" />
             )}
           </div>
-          <div className="text-center">
-            <p className="text-xs font-bold text-slate-800">{micStatusText}</p>
-            <p className="text-[10px] text-slate-400">Powered by Python SpeechRecognition</p>
+          <div className="text-center max-w-[200px]">
+            <p className="text-xs font-bold text-slate-800 break-words">{micStatusText}</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              {isMounted ? 'Python SpeechRecognition Engine' : 'Speech-to-Text Ready'}
+            </p>
           </div>
         </div>
 
