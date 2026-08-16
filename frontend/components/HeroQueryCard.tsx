@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { SUPPORTED_LANGUAGES } from '../lib/utils/formatters';
 import { PipelineStageStatus } from '../lib/types/rag';
+import { PcmWavRecorder } from '../lib/utils/audioRecorder';
 
 interface HeroQueryCardProps {
   query: string;
@@ -43,8 +44,8 @@ export default function HeroQueryCard({
   const [isListening, setIsListening] = useState(false);
   const [micStatusText, setMicStatusText] = useState('Click microphone to speak');
   const recognitionRef = useRef<any>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const pcmRecorderRef = useRef<PcmWavRecorder | null>(null);
+  const capturedTextRef = useRef<string>('');
 
   const currentLang = SUPPORTED_LANGUAGES.find((l) => l.code === selectedLanguage) || SUPPORTED_LANGUAGES[0];
 
@@ -75,28 +76,14 @@ export default function HeroQueryCard({
 
           const currentText = finalTranscript || interimTranscript;
           if (currentText) {
+            capturedTextRef.current = currentText;
             onQueryChange(currentText);
-            setMicStatusText(`Transcribed: "${currentText}"`);
-          }
-
-          if (finalTranscript) {
-            setIsListening(false);
-            setTimeout(() => {
-              onSubmit(finalTranscript.trim());
-            }, 300);
+            setMicStatusText(`Live Transcribed: "${currentText}"`);
           }
         };
 
         rec.onerror = (e: any) => {
-          console.warn('Speech recognition notice:', e.error);
-          setIsListening(false);
-          if (e.error === 'not-allowed') {
-            setMicStatusText('Mic access denied. Please allow microphone permissions in browser.');
-          } else if (e.error === 'no-speech') {
-            setMicStatusText('No speech detected. Click microphone to try again.');
-          } else {
-            setMicStatusText('Click microphone to speak or type question.');
-          }
+          console.warn('Browser speech recognition note:', e.error);
         };
 
         rec.onend = () => {
@@ -106,67 +93,62 @@ export default function HeroQueryCard({
         recognitionRef.current = rec;
       }
     }
-  }, [currentLang, onQueryChange, onSubmit]);
+  }, [currentLang, onQueryChange]);
 
   const handleToggleMic = async () => {
     if (isLoading) return;
 
     if (isListening) {
+      setIsListening(false);
+      setMicStatusText('Processing audio with Python SpeechRecognition...');
+
+      // Stop browser recognition
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
         } catch (e) {}
       }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
-      setIsListening(false);
-      setMicStatusText('Voice input stopped. Click mic to speak.');
-    } else {
-      if (recognitionRef.current) {
-        recognitionRef.current.lang = currentLang.sttLang;
+
+      // Stop PCM recorder and submit WAV blob to Python backend
+      if (pcmRecorderRef.current) {
         try {
-          recognitionRef.current.start();
-          setIsListening(true);
-          setMicStatusText(`Listening in ${currentLang.name}...`);
-        } catch (e) {
-          // If already started or browser state glitch, reset
-          try {
-            recognitionRef.current.stop();
-            setTimeout(() => {
-              recognitionRef.current.start();
-            }, 100);
-          } catch (err) {}
-        }
-      } else {
-        // Fallback: Real Audio Stream via getUserMedia + MediaRecorder for browsers lacking Web Speech API
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          const mediaRecorder = new MediaRecorder(stream);
-          mediaRecorderRef.current = mediaRecorder;
-          audioChunksRef.current = [];
-
-          mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-              audioChunksRef.current.push(event.data);
-            }
-          };
-
-          mediaRecorder.onstop = () => {
-            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-            stream.getTracks().forEach((track) => track.stop());
-            if (onVoiceBlobSubmit) {
-              onVoiceBlobSubmit(audioBlob);
-            }
-          };
-
-          mediaRecorder.start();
-          setIsListening(true);
-          setMicStatusText('Recording audio stream... Click mic again to stop and submit.');
+          const wavBlob = await pcmRecorderRef.current.stop();
+          pcmRecorderRef.current = null;
+          
+          if (onVoiceBlobSubmit) {
+            onVoiceBlobSubmit(wavBlob);
+          } else if (capturedTextRef.current) {
+            onSubmit(capturedTextRef.current);
+          }
         } catch (err) {
-          console.error('Microphone stream error:', err);
-          setMicStatusText('Microphone permission denied. Please allow microphone access in browser.');
+          console.error('Failed to encode audio WAV:', err);
+          if (capturedTextRef.current) {
+            onSubmit(capturedTextRef.current);
+          }
         }
+      } else if (capturedTextRef.current) {
+        onSubmit(capturedTextRef.current);
+      }
+    } else {
+      capturedTextRef.current = '';
+      try {
+        const recorder = new PcmWavRecorder();
+        await recorder.start();
+        pcmRecorderRef.current = recorder;
+        setIsListening(true);
+        setMicStatusText(`Listening in ${currentLang.name}... Click mic again when done`);
+
+        // Also start browser recognizer for live waveform & text hints
+        if (recognitionRef.current) {
+          recognitionRef.current.lang = currentLang.sttLang;
+          try {
+            recognitionRef.current.start();
+          } catch (e) {}
+        }
+      } catch (err) {
+        console.error('Failed to start microphone:', err);
+        setMicStatusText('Microphone access denied. Please allow mic in browser settings.');
+        setIsListening(false);
       }
     }
   };
@@ -178,7 +160,7 @@ export default function HeroQueryCard({
   };
 
   const pipelineStages = [
-    { key: 'stt', label: 'Speech STT', sub: 'Transcribe speech', icon: Mic },
+    { key: 'stt', label: 'Python STT', sub: 'SpeechRecognition Engine', icon: Mic },
     { key: 'retrieval', label: 'BM25 + BGE-M3', sub: 'Hybrid Retrieval', icon: Search },
     { key: 'rerank', label: 'Cross-Reranker', sub: 'Re-rank results', icon: Layers },
     { key: 'generation', label: 'Gemini LLM', sub: 'Generate answer', icon: Cpu },
@@ -205,7 +187,7 @@ export default function HeroQueryCard({
             Ask anything. <span className="text-blue-600">Get grounded answers.</span>
           </h2>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Speak or type your question in any supported language.
+            Speak or type your question in any supported Indic language or English.
           </p>
         </div>
 
@@ -281,7 +263,7 @@ export default function HeroQueryCard({
           </div>
           <div className="text-center">
             <p className="text-xs font-bold text-slate-800">{micStatusText}</p>
-            <p className="text-[10px] text-slate-400">We support 11+ Indic languages</p>
+            <p className="text-[10px] text-slate-400">Powered by Python SpeechRecognition</p>
           </div>
         </div>
 
@@ -295,7 +277,7 @@ export default function HeroQueryCard({
               disabled={isLoading}
               onChange={(e) => onQueryChange(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask a question in English, Hindi, Bengali, Tamil, etc..."
+              placeholder="Ask a question in English, Hindi, Bengali, Tamil, Marathi, etc..."
               className="flex-1 bg-white border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none shadow-2xs"
             />
             <button
