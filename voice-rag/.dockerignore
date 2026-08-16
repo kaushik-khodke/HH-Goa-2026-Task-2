@@ -1,0 +1,16 @@
+.git
+.gitignore
+.env
+.env.local
+.next
+node_modules
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.ipynb_checkpoints
+notebooks
+reports
+*.log
