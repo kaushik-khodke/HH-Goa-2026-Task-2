@@ -40,7 +40,7 @@ export async function fetchVoiceQuery(audioBlob: Blob, languageCode: string): Pr
   return res.json();
 }
 
-export async function checkBackendHealth(): Promise<{ status: string; corpus_passages_loaded?: number }> {
+export async function checkBackendHealth(): Promise<{ status: string; corpus_passages_loaded?: number; corpus_passages_chunked?: number }> {
   try {
     const res = await fetch(`${API_BASE_URL}/health`, { cache: 'no-store' });
     if (res.ok) {

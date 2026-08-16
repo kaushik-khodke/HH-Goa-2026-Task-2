@@ -21,7 +21,8 @@ import { PipelineStageStatus } from '../lib/types/rag';
 interface HeroQueryCardProps {
   query: string;
   onQueryChange: (val: string) => void;
-  onSubmit: () => void;
+  onSubmit: (overrideText?: string) => void;
+  onVoiceBlobSubmit?: (blob: Blob) => void;
   selectedLanguage: string;
   onLanguageChange: (lang: string) => void;
   currentStage: PipelineStageStatus;
@@ -32,6 +33,7 @@ export default function HeroQueryCard({
   query,
   onQueryChange,
   onSubmit,
+  onVoiceBlobSubmit,
   selectedLanguage,
   onLanguageChange,
   currentStage,
@@ -41,6 +43,8 @@ export default function HeroQueryCard({
   const [isListening, setIsListening] = useState(false);
   const [micStatusText, setMicStatusText] = useState('Click microphone to speak');
   const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const currentLang = SUPPORTED_LANGUAGES.find((l) => l.code === selectedLanguage) || SUPPORTED_LANGUAGES[0];
 
@@ -50,23 +54,49 @@ export default function HeroQueryCard({
       if (SpeechRecognition) {
         const rec = new SpeechRecognition();
         rec.continuous = false;
-        rec.interimResults = false;
+        rec.interimResults = true;
 
         rec.onstart = () => {
           setIsListening(true);
-          setMicStatusText('Listening... Speak clearly');
+          setMicStatusText(`Listening in ${currentLang.name}... Speak now`);
         };
 
         rec.onresult = (event: any) => {
-          const text = event.results[0][0].transcript;
-          onQueryChange(text);
-          setMicStatusText(`Transcribed: "${text}"`);
-          setIsListening(false);
+          let interimTranscript = '';
+          let finalTranscript = '';
+
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript;
+            } else {
+              interimTranscript += event.results[i][0].transcript;
+            }
+          }
+
+          const currentText = finalTranscript || interimTranscript;
+          if (currentText) {
+            onQueryChange(currentText);
+            setMicStatusText(`Transcribed: "${currentText}"`);
+          }
+
+          if (finalTranscript) {
+            setIsListening(false);
+            setTimeout(() => {
+              onSubmit(finalTranscript.trim());
+            }, 300);
+          }
         };
 
-        rec.onerror = () => {
+        rec.onerror = (e: any) => {
+          console.warn('Speech recognition notice:', e.error);
           setIsListening(false);
-          setMicStatusText('Click microphone to speak');
+          if (e.error === 'not-allowed') {
+            setMicStatusText('Mic access denied. Please allow microphone permissions in browser.');
+          } else if (e.error === 'no-speech') {
+            setMicStatusText('No speech detected. Click microphone to try again.');
+          } else {
+            setMicStatusText('Click microphone to speak or type question.');
+          }
         };
 
         rec.onend = () => {
@@ -76,24 +106,67 @@ export default function HeroQueryCard({
         recognitionRef.current = rec;
       }
     }
-  }, [onQueryChange]);
+  }, [currentLang, onQueryChange, onSubmit]);
 
-  const handleToggleMic = () => {
+  const handleToggleMic = async () => {
     if (isLoading) return;
+
     if (isListening) {
-      if (recognitionRef.current) recognitionRef.current.stop();
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {}
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
       setIsListening(false);
+      setMicStatusText('Voice input stopped. Click mic to speak.');
     } else {
       if (recognitionRef.current) {
         recognitionRef.current.lang = currentLang.sttLang;
         try {
           recognitionRef.current.start();
+          setIsListening(true);
+          setMicStatusText(`Listening in ${currentLang.name}...`);
         } catch (e) {
-          // Ignore if active
+          // If already started or browser state glitch, reset
+          try {
+            recognitionRef.current.stop();
+            setTimeout(() => {
+              recognitionRef.current.start();
+            }, 100);
+          } catch (err) {}
         }
       } else {
-        // Sample fallback query if Web Speech is unavailable
-        onQueryChange('who is the president of India?');
+        // Fallback: Real Audio Stream via getUserMedia + MediaRecorder for browsers lacking Web Speech API
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const mediaRecorder = new MediaRecorder(stream);
+          mediaRecorderRef.current = mediaRecorder;
+          audioChunksRef.current = [];
+
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              audioChunksRef.current.push(event.data);
+            }
+          };
+
+          mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+            stream.getTracks().forEach((track) => track.stop());
+            if (onVoiceBlobSubmit) {
+              onVoiceBlobSubmit(audioBlob);
+            }
+          };
+
+          mediaRecorder.start();
+          setIsListening(true);
+          setMicStatusText('Recording audio stream... Click mic again to stop and submit.');
+        } catch (err) {
+          console.error('Microphone stream error:', err);
+          setMicStatusText('Microphone permission denied. Please allow microphone access in browser.');
+        }
       }
     }
   };
@@ -189,6 +262,7 @@ export default function HeroQueryCard({
               type="button"
               disabled={isLoading}
               onClick={handleToggleMic}
+              aria-label={isListening ? 'Stop listening' : 'Start voice input'}
               className={`h-24 w-24 rounded-full flex items-center justify-center transition-all duration-300 ${
                 isListening
                   ? 'bg-rose-500 text-white shadow-xl shadow-rose-200 scale-105 animate-pulse'
@@ -196,9 +270,9 @@ export default function HeroQueryCard({
               } disabled:opacity-50`}
             >
               {isListening ? (
-                <Volume2 className="h-10 w-10 text-white" />
+                <Volume2 className="h-10 w-10 text-white animate-pulse" />
               ) : (
-                <Mic className="h-10 w-10 text-blue-600" />
+                <Mic className="h-10 w-10 text-blue-600 font-bold" />
               )}
             </button>
             {isListening && (
@@ -227,7 +301,7 @@ export default function HeroQueryCard({
             <button
               type="button"
               disabled={isLoading || !query.trim()}
-              onClick={onSubmit}
+              onClick={() => onSubmit()}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl text-sm transition-all shadow-md shadow-blue-500/20 disabled:opacity-40 shrink-0"
             >
               <Send className="h-4 w-4" />
@@ -235,7 +309,7 @@ export default function HeroQueryCard({
             </button>
           </div>
 
-          {/* Horizontal Pipeline Stepper (Matching Reference Image) */}
+          {/* Horizontal Pipeline Stepper */}
           <div className="w-full bg-slate-50/80 border border-slate-200/80 rounded-xl px-4 py-2.5 flex items-center justify-between overflow-x-auto text-[11px]">
             {pipelineStages.map((stage, idx) => {
               const Icon = stage.icon;

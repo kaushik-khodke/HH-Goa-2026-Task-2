@@ -259,6 +259,31 @@ export default function Home() {
     [queryText, selectedLanguage]
   );
 
+  const handleVoiceBlobSubmit = useCallback(
+    async (audioBlob: Blob) => {
+      setStage('stt');
+      try {
+        setStage('retrieval');
+        const res = await fetchVoiceQuery(audioBlob, selectedLanguage);
+        if (res.query) {
+          setQueryText(res.query);
+        }
+        setStage('generation');
+        setResult(res);
+        setStage('complete');
+
+        setHistoryItems((prev) => [
+          { query: res.query || 'Voice Query', answer: res.answer, time: 'Just now' },
+          ...prev.slice(0, 14),
+        ]);
+      } catch (err: any) {
+        console.error('Voice API Query Error:', err);
+        setStage('error');
+      }
+    },
+    [selectedLanguage]
+  );
+
   const isLoading = stage !== 'idle' && stage !== 'complete' && stage !== 'error';
 
   return (
@@ -280,7 +305,8 @@ export default function Home() {
           <HeroQueryCard
             query={queryText}
             onQueryChange={setQueryText}
-            onSubmit={() => handleTextSubmit()}
+            onSubmit={(text) => handleTextSubmit(text)}
+            onVoiceBlobSubmit={handleVoiceBlobSubmit}
             selectedLanguage={selectedLanguage}
             onLanguageChange={setSelectedLanguage}
             currentStage={stage}
