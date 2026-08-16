@@ -33,10 +33,22 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+
+@app.get("/")
+@app.head("/")
+def root():
+    """Root health check for cloud load balancers and platform pings."""
+    return {
+        "status": "online",
+        "service": "Voice-Enabled Multilingual RAG API",
+        "docs_url": "/docs",
+        "health_url": "/health"
+    }
 
 # Initialize Paragraph Chunker (Strategy C)
 chunker = ParagraphChunker()
