@@ -6,33 +6,26 @@ import {
   History, 
   BarChart3, 
   Database, 
-  Settings, 
   Info, 
-  Sun, 
   Radio
 } from 'lucide-react';
 
-export type NavTab = 'ask' | 'history' | 'analytics' | 'sources' | 'settings' | 'about';
+export type NavTab = 'ask' | 'history' | 'analytics' | 'sources' | 'about';
 
 interface SidebarProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
-  isLightMode: boolean;
-  onToggleTheme: () => void;
 }
 
 export default function Sidebar({
   activeTab,
   onTabChange,
-  isLightMode,
-  onToggleTheme,
 }: SidebarProps) {
   const navItems = [
     { key: 'ask' as NavTab, label: 'Ask', icon: Send },
     { key: 'history' as NavTab, label: 'History', icon: History },
     { key: 'analytics' as NavTab, label: 'Analytics', icon: BarChart3 },
     { key: 'sources' as NavTab, label: 'Sources', icon: Database },
-    { key: 'settings' as NavTab, label: 'Settings', icon: Settings },
     { key: 'about' as NavTab, label: 'About', icon: Info },
   ];
 
@@ -85,8 +78,8 @@ export default function Sidebar({
         </nav>
       </div>
 
-      {/* Bottom Health & Theme Toggle Card */}
-      <div className="space-y-4 pt-4 border-t border-slate-100">
+      {/* Bottom Health Card */}
+      <div className="pt-4 border-t border-slate-100">
         {/* System Health Card */}
         <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 space-y-2.5">
           <div className="flex items-center justify-between">
@@ -105,22 +98,6 @@ export default function Sidebar({
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Theme Toggle Button */}
-        <div className="flex items-center justify-between px-2 py-1 bg-slate-50 border border-slate-200/80 rounded-xl">
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-            <Sun className="h-3.5 w-3.5 text-amber-500" />
-            <span>Light Mode</span>
-          </div>
-          <button
-            type="button"
-            suppressHydrationWarning
-            onClick={onToggleTheme}
-            className="w-8 h-4 bg-blue-600 rounded-full relative transition-colors focus:outline-none"
-          >
-            <span className="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full shadow-sm" />
-          </button>
         </div>
       </div>
     </aside>

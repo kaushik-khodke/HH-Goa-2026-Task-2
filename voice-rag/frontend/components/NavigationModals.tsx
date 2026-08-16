@@ -6,7 +6,6 @@ import {
   History, 
   BarChart3, 
   Database, 
-  Settings, 
   Info, 
   Search, 
   Layers, 
@@ -88,7 +87,6 @@ export default function NavigationModals({
             {activeTab === 'history' && <History className="h-5 w-5 text-blue-600" />}
             {activeTab === 'analytics' && <BarChart3 className="h-5 w-5 text-blue-600" />}
             {activeTab === 'sources' && <Database className="h-5 w-5 text-blue-600" />}
-            {activeTab === 'settings' && <Settings className="h-5 w-5 text-blue-600" />}
             {activeTab === 'about' && <Info className="h-5 w-5 text-blue-600" />}
             <div>
               <h3 className="text-base font-bold text-slate-900 capitalize">
@@ -287,30 +285,7 @@ export default function NavigationModals({
             </div>
           )}
 
-          {/* ================= SETTINGS TAB ================= */}
-          {activeTab === 'settings' && (
-            <div className="space-y-4 text-xs">
-              <div className="space-y-2">
-                <label className="font-bold text-slate-800">Primary Generation Model</label>
-                <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none">
-                  <option>gemini-3.6-flash (Google Gemini 3.6)</option>
-                  <option>gemini-3.5-flash (Google Gemini 3.5)</option>
-                  <option>llama-3.3-70b-versatile (Groq Llama 3.3 70B)</option>
-                  <option>grok-2 (xAI Grok 2)</option>
-                </select>
-              </div>
 
-              <div className="space-y-2">
-                <label className="font-bold text-slate-800">Retrieval Top-K</label>
-                <input type="number" defaultValue={10} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800" />
-              </div>
-
-              <div className="space-y-2">
-                <label className="font-bold text-slate-800">Cross-Encoder Rerank Top-K</label>
-                <input type="number" defaultValue={4} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800" />
-              </div>
-            </div>
-          )}
 
           {/* ================= ABOUT TAB ================= */}
           {activeTab === 'about' && (

@@ -14,7 +14,6 @@ import { fetchTextQuery, fetchVoiceQuery, checkBackendHealth, fetchCorpusPassage
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<NavTab>('ask');
-  const [isLightMode, setIsLightMode] = useState<boolean>(true);
   const [selectedLanguage, setSelectedLanguage] = useState<string>('en');
   const [queryText, setQueryText] = useState<string>('');
   const [stage, setStage] = useState<PipelineStageStatus>('idle');
@@ -268,8 +267,6 @@ export default function Home() {
       <Sidebar
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        isLightMode={isLightMode}
-        onToggleTheme={() => setIsLightMode(!isLightMode)}
       />
 
       {/* 2. Main Content Viewport */}
