@@ -1,49 +1,22 @@
-# Environment files & API keys (Security)
+# Frontend build & dependencies
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+node_modules/
+.next/
+
+# Environment files & secrets
 .env
 *.env
 .env.local
 .env.*.local
-*.env*
-
-# Node dependencies and Next.js build cache
-node_modules/
-**/node_modules/
-.next/
-**/.next/
-out/
-build/
-dist/
 
 # Python cache & virtual environments
 __pycache__/
 **/__pycache__/
 *.pyc
-*.pyo
-*.pyd
 .pytest_cache/
+.ipynb_checkpoints/
 venv/
 .venv/
-env/
-.env/
-
-# Jupyter checkpoints
-.ipynb_checkpoints/
-*.ipynb_checkpoints
-
-# Scratch temporary files
 scratch/
-
-# Large binary datasets
-*.parquet
-*.bin
-*.onnx
-*.pt
-*.safetensors
-data/raw/
-data/processed/
-
-# System & IDE files
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/

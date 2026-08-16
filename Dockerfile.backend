@@ -17,8 +17,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy requirements file
-COPY requirements.txt .
+# Copy requirements file (available in root or backend/)
+COPY requirements.txt backend/requirements.tx[t] ./
 
 # Install PyTorch CPU first to avoid heavy GPU wheels on cloud servers, then install remaining dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
@@ -29,6 +29,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY src/ ./src/
 COPY backend/ ./backend/
 COPY data/ ./data/
+COPY indexes/ ./indexes/
 COPY .env* ./
 
 # Expose backend port
@@ -36,7 +37,7 @@ EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
-# Start FastAPI application via Uvicorn
-CMD ["uvicorn", "backend.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start FastAPI application via Uvicorn respecting dynamic $PORT from cloud PaaS
+CMD ["sh", "-c", "uvicorn backend.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
