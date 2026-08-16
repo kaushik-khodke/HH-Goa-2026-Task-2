@@ -29,7 +29,8 @@ export default function Home() {
     checkBackendHealth().then((h) => {
       if (h.status === 'healthy') {
         setIsBackendReady(true);
-        if (h.corpus_passages_loaded) setChunkCount(h.corpus_passages_loaded);
+        const count = h.corpus_passages_chunked || h.corpus_passages_loaded;
+        if (count) setChunkCount(count);
       } else {
         setIsBackendReady(false);
       }
