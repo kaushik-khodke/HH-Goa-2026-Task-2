@@ -7,13 +7,15 @@ import {
   Globe, 
   ChevronDown, 
   Check, 
-  ChevronRight,
-  Search,
-  Layers,
-  Cpu,
-  ShieldCheck,
-  CheckCircle2,
-  Volume2
+  ChevronRight, 
+  Search, 
+  Layers, 
+  Cpu, 
+  ShieldCheck, 
+  CheckCircle2, 
+  Volume2,
+  Sparkles,
+  AlertCircle
 } from 'lucide-react';
 import { SUPPORTED_LANGUAGES } from '../lib/utils/formatters';
 import { PipelineStageStatus } from '../lib/types/rag';
@@ -42,14 +44,29 @@ export default function HeroQueryCard({
 }: HeroQueryCardProps) {
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
   const [micStatusText, setMicStatusText] = useState('Click microphone to speak');
   const [isMounted, setIsMounted] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
 
   const recognitionRef = useRef<any>(null);
   const pcmRecorderRef = useRef<PcmWavRecorder | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const animFrameRef = useRef<number | null>(null);
   const capturedTextRef = useRef<string>('');
 
   const currentLang = SUPPORTED_LANGUAGES.find((l) => l.code === selectedLanguage) || SUPPORTED_LANGUAGES[0];
+
+  const quickSamples = [
+    { label: 'Manhattan Project', text: 'What was the Manhattan project and what was its impact?' },
+    { label: 'हिंदी (Hindi)', text: 'मैनहट्टन परियोजना की सफलता का प्रभाव क्या था?' },
+    { label: 'MS MARCO Passage', text: 'Explain the summary of the indexed scientific passage.' },
+    { label: 'मराठी (Marathi)', text: 'मॅनहॅटन प्रकल्पाचा परिणाम काय होता?' },
+    { label: 'বাংলা (Bengali)', text: 'ম্যানহাটন প্রকল্পের উদ্দেশ্য কী ছিল?' },
+  ];
 
   useEffect(() => {
     setIsMounted(true);
@@ -87,7 +104,7 @@ export default function HeroQueryCard({
           };
 
           rec.onerror = (e: any) => {
-            console.warn('SpeechRecognition notice:', e.error);
+            console.warn('Browser SpeechRecognition notice:', e.error);
           };
 
           recognitionRef.current = rec;
@@ -96,68 +113,127 @@ export default function HeroQueryCard({
         }
       }
     }
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
   }, [currentLang, onQueryChange]);
+
+  const startVolumeVisualizer = (stream: MediaStream) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const audioCtx = new AudioCtx();
+      audioContextRef.current = audioCtx;
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      const source = audioCtx.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateVolume = () => {
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const avg = sum / dataArray.length;
+        setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
+        animFrameRef.current = requestAnimationFrame(updateVolume);
+      };
+      updateVolume();
+    } catch (e) {
+      console.warn('Volume visualizer init notice:', e);
+    }
+  };
 
   const handleToggleMic = async () => {
     if (isLoading) return;
+    setMicError(null);
 
     if (isListening) {
-      // 1. User clicked to stop speaking -> Finish recording and transcribe
+      // 1. STOP RECORDING
       setIsListening(false);
-      setMicStatusText('Transcribing voice with Python SpeechRecognition...');
-
-      // Stop browser recognition if running
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch (e) {}
+      setAudioLevel(0);
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (audioContextRef.current) {
+        try { audioContextRef.current.close(); } catch (e) {}
       }
 
-      // Stop PCM recorder and submit audio WAV to Python backend
+      setMicStatusText('Processing audio with Python SpeechRecognition...');
+
+      // Stop browser recognition
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+      }
+
+      // Priority A: Stop PCM WAV recorder
       if (pcmRecorderRef.current) {
         try {
           const wavBlob = await pcmRecorderRef.current.stop();
           pcmRecorderRef.current = null;
-
           if (onVoiceBlobSubmit) {
             onVoiceBlobSubmit(wavBlob);
-          } else if (capturedTextRef.current.trim()) {
-            onSubmit(capturedTextRef.current.trim());
-          } else {
-            setMicStatusText('No audio detected. Click mic to try again.');
+            return;
           }
-        } catch (err) {
-          console.error('Audio recorder stop error:', err);
-          if (capturedTextRef.current.trim()) {
-            onSubmit(capturedTextRef.current.trim());
-          } else {
-            setMicStatusText('Audio error. Click mic to try again.');
-          }
+        } catch (e) {
+          console.warn('PCM stop fallback:', e);
         }
+      }
+
+      // Priority B: Stop MediaRecorder
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
       } else if (capturedTextRef.current.trim()) {
         onSubmit(capturedTextRef.current.trim());
       }
     } else {
-      // 2. User clicked to start speaking -> Start PCM audio capture
+      // 2. START RECORDING
       capturedTextRef.current = '';
+      audioChunksRef.current = [];
 
       try {
-        const recorder = new PcmWavRecorder();
-        await recorder.start();
-        pcmRecorderRef.current = recorder;
-        setIsListening(true);
-        setMicStatusText(`Listening in ${currentLang.name}... Speak now, then click mic to stop`);
+        // Attempt PCM WAV Recorder first
+        const pcmRecorder = new PcmWavRecorder();
+        await pcmRecorder.start();
+        pcmRecorderRef.current = pcmRecorder;
 
-        // Also start browser recognizer for live text streaming
+        // Start volume visualizer
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaStreamRef.current = stream;
+        startVolumeVisualizer(stream);
+
+        // Also setup standard MediaRecorder as container fallback
+        try {
+          const mr = new MediaRecorder(stream);
+          mr.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+          };
+          mr.onstop = () => {
+            const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
+            if (onVoiceBlobSubmit) {
+              onVoiceBlobSubmit(blob);
+            } else if (capturedTextRef.current.trim()) {
+              onSubmit(capturedTextRef.current.trim());
+            }
+          };
+          mr.start(250);
+          mediaRecorderRef.current = mr;
+        } catch (mrErr) {
+          console.warn('MediaRecorder fallback init:', mrErr);
+        }
+
+        setIsListening(true);
+        setMicStatusText(`Listening in ${currentLang.name}... Speak now, then click mic to finish`);
+
+        // Start speech recognition for live word streaming
         if (recognitionRef.current) {
           recognitionRef.current.lang = currentLang.sttLang;
-          try {
-            recognitionRef.current.start();
-          } catch (e) {}
+          try { recognitionRef.current.start(); } catch (e) {}
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Microphone capture error:', err);
-        setMicStatusText('Microphone access denied. Please allow microphone in browser settings.');
+        setMicError('Microphone permission blocked. Please allow mic in browser settings.');
+        setMicStatusText('Mic permission denied. Use sample questions or type below.');
         setIsListening(false);
       }
     }
@@ -197,7 +273,7 @@ export default function HeroQueryCard({
             Ask anything. <span className="text-blue-600">Get grounded answers.</span>
           </h2>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Speak or type your question in any supported Indic language or English.
+            Speak via microphone or type your question in English or any Indic language.
           </p>
         </div>
 
@@ -247,14 +323,14 @@ export default function HeroQueryCard({
 
       {/* Main Input Row: Mic + Search Bar */}
       <div className="flex flex-col lg:flex-row items-center gap-6">
-        {/* Circular Microphone */}
-        <div className="flex flex-col items-center gap-2 shrink-0">
+        {/* Circular Microphone + Live Volume Waveform */}
+        <div className="flex flex-col items-center gap-2.5 shrink-0">
           <div className="relative">
             <button
               type="button"
               disabled={isLoading}
               onClick={handleToggleMic}
-              aria-label={isListening ? 'Stop listening' : 'Start voice input'}
+              aria-label={isListening ? 'Stop recording' : 'Start microphone recording'}
               className={`h-24 w-24 rounded-full flex items-center justify-center transition-all duration-300 ${
                 isListening
                   ? 'bg-rose-500 text-white shadow-xl shadow-rose-200 scale-105 animate-pulse'
@@ -271,10 +347,21 @@ export default function HeroQueryCard({
               <span className="absolute -inset-1 rounded-full border-2 border-rose-400 animate-ping" />
             )}
           </div>
-          <div className="text-center max-w-[200px]">
+
+          {/* Real-Time Audio Level Meter */}
+          {isListening && (
+            <div className="w-24 bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
+              <div
+                className="bg-emerald-500 h-full transition-all duration-75"
+                style={{ width: `${Math.max(8, audioLevel)}%` }}
+              />
+            </div>
+          )}
+
+          <div className="text-center max-w-[210px]">
             <p className="text-xs font-bold text-slate-800 break-words">{micStatusText}</p>
             <p className="text-[10px] text-slate-400 mt-0.5">
-              {isMounted ? 'Python SpeechRecognition Engine' : 'Speech-to-Text Ready'}
+              {isMounted ? 'Python SpeechRecognition & 11+ Indic Languages' : 'Speech-to-Text Ready'}
             </p>
           </div>
         </div>
@@ -301,6 +388,26 @@ export default function HeroQueryCard({
               <Send className="h-4 w-4" />
               <span>Ask</span>
             </button>
+          </div>
+
+          {/* Quick Demo Question Pills */}
+          <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600">
+            <span className="flex items-center gap-1 text-[11px] font-bold text-slate-400">
+              <Sparkles className="h-3 w-3 text-amber-500" /> Try Sample:
+            </span>
+            {quickSamples.map((sample, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => {
+                  onQueryChange(sample.text);
+                  onSubmit(sample.text);
+                }}
+                className="bg-slate-50 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 hover:border-blue-300 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all"
+              >
+                {sample.label}
+              </button>
+            ))}
           </div>
 
           {/* Horizontal Pipeline Stepper */}
@@ -351,6 +458,13 @@ export default function HeroQueryCard({
           </div>
         </div>
       </div>
+
+      {micError && (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 px-3.5 py-2 rounded-xl text-xs text-amber-800">
+          <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+          <span>{micError}</span>
+        </div>
+      )}
     </div>
   );
 }

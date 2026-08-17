@@ -59,37 +59,17 @@ class GroundedAnswerGenerator:
         return "unknown"
 
     def _call_gemini_model(self, prompt: str, model_name: str) -> Optional[str]:
-        """Attempt API call to a Gemini model supporting multiple SDK versions and direct REST."""
-        if not self.gemini_api_key:
+        """Attempt API call to Gemini model via direct REST with fast timeout."""
+        if not self.gemini_api_key or not self.gemini_api_key.startswith("AIzaSy"):
             return None
 
-        # 1. Try google.generativeai SDK
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=self.gemini_api_key)
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            if response and response.text:
-                return response.text.strip()
-        except Exception:
-            pass
+        # Clean model name
+        target_model = model_name if "gemini" in model_name else "gemini-1.5-flash"
+        if "3.5" in target_model or "3.6" in target_model:
+            target_model = "gemini-1.5-flash"
 
-        # 2. Try new google.genai SDK
         try:
-            from google import genai
-            client = genai.Client(api_key=self.gemini_api_key)
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-            )
-            if response and hasattr(response, "text") and response.text:
-                return response.text.strip()
-        except Exception:
-            pass
-
-        # 3. Direct Gemini REST API fallback (Zero dependency)
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.gemini_api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{target_model}:generateContent?key={self.gemini_api_key}"
             payload = {
                 "contents": [{
                     "parts": [{"text": prompt}]
@@ -98,7 +78,7 @@ class GroundedAnswerGenerator:
                     "temperature": 0.2
                 }
             }
-            res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=15)
+            res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=5)
             if res.status_code == 200:
                 data = res.json()
                 candidates = data.get("candidates", [])
@@ -106,19 +86,8 @@ class GroundedAnswerGenerator:
                     parts = candidates[0].get("content", {}).get("parts", [])
                     if parts and "text" in parts[0]:
                         return parts[0]["text"].strip()
-            elif res.status_code == 404:
-                # Try standard fallback model name
-                alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
-                res_alt = requests.post(alt_url, json=payload, headers={"Content-Type": "application/json"}, timeout=15)
-                if res_alt.status_code == 200:
-                    data = res_alt.json()
-                    candidates = data.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts and "text" in parts[0]:
-                            return parts[0]["text"].strip()
         except Exception as e:
-            print(f"Gemini API Direct REST Notice: {e}")
+            print(f"Gemini API Notice: {e}")
 
         return None
 

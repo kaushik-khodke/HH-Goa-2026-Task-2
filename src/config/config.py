@@ -32,12 +32,12 @@ class Settings(BaseModel):
     # Model Choice Defaults & Fallback Sequence
     embedding_model_name: str = "BAAI/bge-m3"
     reranker_model_name: str = "BAAI/bge-reranker-v2-m3"
-    primary_generation_model: str = os.getenv("PRIMARY_GENERATION_MODEL", "gemini-3.5-flash-lite")
+    primary_generation_model: str = os.getenv("PRIMARY_GENERATION_MODEL", "llama-3.3-70b-versatile")
     fallback_generation_models: list[str] = [
         m.strip()
         for m in os.getenv(
             "FALLBACK_GENERATION_MODELS",
-            "qwen-3.6-27b,gemini-3.5-flash,gemini-3.6-flash,gemini-2.5-flash",
+            "llama-3.3-70b-versatile,gemini-1.5-flash,gemini-2.0-flash",
         ).split(",")
         if m.strip()
     ]
